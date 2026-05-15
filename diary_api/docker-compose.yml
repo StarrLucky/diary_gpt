@@ -1,0 +1,31 @@
+services:
+  diary-api:
+    build: .
+    container_name: diary-api
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ../diary_gpt/data:/app/data
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: diary-ngrok
+    restart: unless-stopped
+    command: http diary-api:8000 --url=${NGROK_DOMAIN}
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"
+
+  diary-sync:
+    build: ./sync
+    container_name: diary-sync
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DB_PATH=/app/data/diary.db
+      - VAULT_SYNC_STATE=/app/state/vault_sync_state.json
+      - VAULT_SYNC_INTERVAL=${VAULT_SYNC_INTERVAL:-60}
+    volumes:
+      - ../diary_gpt/data:/app/data:ro
+      - ./sync_state:/app/state

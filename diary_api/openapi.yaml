@@ -1,0 +1,175 @@
+openapi: 3.1.0
+info:
+  title: Diary API
+  description: "Personal diary. Workflow: 1) GET /stats, 2) GET /entries/summary page by page until all pages loaded, 3) GET /entries/{id} for full text if needed."
+  version: 5.0.0
+servers:
+  - url: https://YOUR-DOMAIN.ngrok-free.dev
+paths:
+  /stats:
+    get:
+      operationId: getStats
+      summary: Diary overview
+      description: "Total entries, date range, tag counts. ALWAYS call this first."
+      x-openai-isConsequential: false
+      responses:
+        "200":
+          description: Diary statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stats"
+  /entries/summary:
+    get:
+      operationId: getSummary
+      summary: Browse entries page by page
+      description: "Returns 50 entries per page with id + summary + tags (no full text). Response includes page number, total_pages, total_entries. Use it to scan entries by tag and pick relevant ones, then fetch full text via GET /entries/{id}."
+      x-openai-isConsequential: false
+      parameters:
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Filter by single tag from vocabulary (e.g. dating, family, lonely)"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+          description: "Page number (starts at 1). Check total_pages in response to know how many pages to fetch."
+      responses:
+        "200":
+          description: One page of entry summaries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryPage"
+  /entries/{entry_id}:
+    get:
+      operationId: getEntry
+      summary: Read full entry
+      description: "Full text of one entry by ID. Use when you need the complete text beyond the 200-char preview."
+      x-openai-isConsequential: false
+      parameters:
+        - name: entry_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Full entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryFull"
+  /entries:
+    post:
+      operationId: createEntry
+      summary: Save new entry
+      description: Save diary text with tags.
+      x-openai-isConsequential: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - voice_text
+                - tags
+                - summary
+              properties:
+                voice_text:
+                  type: string
+                  description: Diary entry text
+                summary:
+                  type: string
+                  description: |
+                    1-2 sentence summary of what the entry is about.
+                    Capture: what happened, key emotion, who is involved.
+                    Example: "Знакомство в клубе с девушкой"
+                tags:
+                  type: string
+                  description: |
+                    Comma-separated 6-12 tags from a 7-axis vocabulary. Rules: single English word, lowercase, no hyphens, no spaces.
+                    Cover MULTIPLE axes when applicable. Required: at least one EVENT, 1-2 FEELING, 1-2 PATTERN.
+
+                    EVENT (concrete thing that happened): date, breakup, conflict, reflection, memory, fantasy, plan
+                    FEELING: joy, sadness, fear, anger, anticipation, shame, remorse, love, optimism, trust, loneliness, jealousy, disappointment
+                    THEME (life area): dating, relationship, family, work, money, body, friendship, identity, growth, creativity, therapy, aging
+                    PATTERN (psychodynamic, most useful for therapy): avoidance, idealization, withdrawal, chasing, comparison, fantasizing, perfectionism, abandonment, pleasing, rumination, validation
+                    PERSON: father, mother, ex, friend, stranger + transliterated names
+                    PLACE: club, gym, yoga, street, home, party, tinder, instagram, cafe, bar, sauna, restaurant
+                    STATE: drunk, sober, tired
+
+                    PREFER tags from this vocabulary. New single-word tag only if nothing fits — check synonyms first (use "fear" not "nervous", "shame" not "ashamed").
+                    Example: "optimism,anticipation,fantasizing,comparison,jenya,cafe"
+      responses:
+        "200":
+          description: Saved entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntryFull"
+components:
+  schemas:
+    Stats:
+      type: object
+      properties:
+        total_entries:
+          type: integer
+        date_range:
+          type: string
+        tags:
+          type: array
+          items:
+            type: object
+            properties:
+              tag:
+                type: string
+              count:
+                type: integer
+    SummaryPage:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: "Current page number"
+        total_pages:
+          type: integer
+          description: "Total pages available. Fetch all pages for complete context."
+        total_entries:
+          type: integer
+          description: "Total entries matching the query"
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/EntrySummary"
+    EntrySummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        created_at:
+          type: string
+        summary:
+          type: string
+          description: "1-2 sentence summary of the entry written by the GPT at save time"
+        tags:
+          type: string
+    EntryFull:
+      type: object
+      properties:
+        id:
+          type: integer
+        created_at:
+          type: string
+        voice_text:
+          type: string
+        tags:
+          type: string
+        summary:
+          type: string
